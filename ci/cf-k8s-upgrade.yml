@@ -6,13 +6,23 @@ resource_types:
     repository: frodenas/gcs-resource
 
 resources:
-- name: cf-for-k8s-master
+- name: cf-for-k8s-stable
   type: git
   icon: github-box
   source:
     uri: git@github.com:cloudfoundry/cf-for-k8s
     private_key: ((github_private_key.private_key))
     branch: master
+    ignore_paths:
+      - ci/**
+
+- name: cf-for-k8s-next
+  type: git
+  icon: github-box
+  source:
+    uri: git@github.com:cloudfoundry/cf-for-k8s
+    private_key: ((github_private_key.private_key))
+    branch: networking-istio-1-6-4
     ignore_paths:
       - ci/**
 
@@ -48,17 +58,37 @@ jobs:
 - name: create-gke-cluster-and-deploy-cf
   plan:
   - in_parallel:
-    - get: cf-for-k8s-master
-    - get: cf-k8s-networking
-      trigger: true
+    - get: cf-for-k8s-stable
     - get: cf-k8s-networking-ci
   - task: create-gke-cluster
     file: cf-k8s-networking-ci/ci/tasks/cf4k8s/create-gke-cluster.yml
     params:
       CLUSTER_NAME: ci-upgrade-cf
       GCP_SERVICE_ACCOUNT_KEY: ((shared_gcp_account_creds))
+  - task: temp-fix-for-istio-1.4
+    input_mapping:
+      cf-for-k8s: cf-for-k8s-stable
+    config:
+      platform: linux
+      image_resource:
+        type: docker-image
+        source:
+          repository: relintdockerhubpushbot/cf-for-k8s-ci
+      inputs:
+        - name: cf-for-k8s
+      outputs:
+        - name: cf-for-k8s-fixed
+      run:
+        path: bash
+        args:
+          - -exc
+          - |
+            cp -r cf-for-k8s/* cf-for-k8s-fixed/ # won't copy dotfiles, we don't need them, but you need them use .* glob
+            touch cf-for-k8s-fixed/config-optional/ingressgateway-service-loadbalancer.yml
   - task: install-cf
     file: cf-k8s-networking-ci/ci/tasks/cf4k8s/install-cf-for-k8s.yml
+    input_mapping:
+      cf-for-k8s: cf-for-k8s-fixed
     params:
       CF_DOMAIN: &domain "ci-upgrade-cf.routing.lol"
       CLUSTER_NAME: &upgrade-cluster-name ci-upgrade-cf
@@ -92,7 +122,7 @@ jobs:
 - name: upgrade-cf
   plan:
   - in_parallel:
-    - get: cf-for-k8s-master
+    - get: cf-for-k8s-next
     - get: cf-k8s-networking
     - get: cf-k8s-networking-ci
     - get: cf-install-values
@@ -101,6 +131,8 @@ jobs:
   - in_parallel:
     - task: install-cf
       file: cf-k8s-networking-ci/ci/tasks/cf4k8s/install-cf-for-k8s.yml
+      input_mapping:
+        cf-for-k8s: cf-for-k8s-next
       params:
         CF_DOMAIN: *domain
         CLUSTER_NAME: *upgrade-cluster-name
@@ -108,6 +140,8 @@ jobs:
         KPACK_GCR_ACCOUNT_KEY: ((gcp_gcr_service_account_key))
     - task: run-tests
       file: cf-k8s-networking-ci/ci/tasks/cf4k8s/run-upgrade-uptime-test.yml
+      input_mapping:
+        cf-for-k8s: cf-for-k8s-next
       params:
         CF_APP_DOMAIN: "apps.ci-upgrade-cf.routing.lol"
         DATA_PLANE_APP_NAME: *data-plane-app-name
