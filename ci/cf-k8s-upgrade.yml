@@ -15,6 +15,8 @@ resources:
     branch: master
     ignore_paths:
       - ci/**
+  version:
+    ref: 2127adc45ccb46a39dd1970448e8248a0a5999fe #istio 1.6.4 merge, should change 0.6.0 of cf-for-k8s
 
 - name: cf-for-k8s-next
   type: git
@@ -22,7 +24,7 @@ resources:
   source:
     uri: git@github.com:cloudfoundry/cf-for-k8s
     private_key: ((github_private_key.private_key))
-    branch: networking-istio-1-6-4
+    branch: no-loadbalancer-by-default #this should change to master
     ignore_paths:
       - ci/**
 
@@ -65,30 +67,30 @@ jobs:
     params:
       CLUSTER_NAME: ci-upgrade-cf
       GCP_SERVICE_ACCOUNT_KEY: ((shared_gcp_account_creds))
-  - task: temp-fix-for-istio-1.4
-    input_mapping:
-      cf-for-k8s: cf-for-k8s-stable
-    config:
-      platform: linux
-      image_resource:
-        type: docker-image
-        source:
-          repository: relintdockerhubpushbot/cf-for-k8s-ci
-      inputs:
-        - name: cf-for-k8s
-      outputs:
-        - name: cf-for-k8s-fixed
-      run:
-        path: bash
-        args:
-          - -exc
-          - |
-            cp -r cf-for-k8s/* cf-for-k8s-fixed/ # won't copy dotfiles, we don't need them, but you need them use .* glob
-            touch cf-for-k8s-fixed/config-optional/ingressgateway-service-loadbalancer.yml
+  # - task: temp-fix-for-istio-1.4
+  #   input_mapping:
+  #     cf-for-k8s: cf-for-k8s-stable
+  #   config:
+  #     platform: linux
+  #     image_resource:
+  #       type: docker-image
+  #       source:
+  #         repository: relintdockerhubpushbot/cf-for-k8s-ci
+  #     inputs:
+  #       - name: cf-for-k8s
+  #     outputs:
+  #       - name: cf-for-k8s-fixed
+  #     run:
+  #       path: bash
+  #       args:
+  #         - -exc
+  #         - |
+  #           cp -r cf-for-k8s/* cf-for-k8s-fixed/ # won't copy dotfiles, we don't need them, but you need them use .* glob
+  #           touch cf-for-k8s-fixed/config-optional/ingressgateway-service-loadbalancer.yml
   - task: install-cf
     file: cf-k8s-networking-ci/ci/tasks/cf4k8s/install-cf-for-k8s.yml
     input_mapping:
-      cf-for-k8s: cf-for-k8s-fixed
+      cf-for-k8s: cf-for-k8s-stable
     params:
       CF_DOMAIN: &domain "ci-upgrade-cf.routing.lol"
       CLUSTER_NAME: &upgrade-cluster-name ci-upgrade-cf
@@ -129,7 +131,7 @@ jobs:
       passed: [ push-apps ]
       trigger: true
   - in_parallel:
-      fail_fast: true
+      # fail_fast: true
       steps:
       - task: install-cf
         file: cf-k8s-networking-ci/ci/tasks/cf4k8s/install-cf-for-k8s.yml
