@@ -5344,7 +5344,7 @@ spec:
     name: istio-ingressgateway
 ---
 apiVersion: apps/v1
-kind: DaemonSet
+kind: Deployment
 metadata:
   annotations:
     kbld.k14s.io/images: |
@@ -5365,6 +5365,10 @@ spec:
     matchLabels:
       app: istio-ingressgateway
       istio: ingressgateway
+  strategy:
+    rollingUpdate:
+      maxSurge: 100%
+      maxUnavailable: 25%
   template:
     metadata:
       annotations:
@@ -5483,9 +5487,7 @@ spec:
         ports:
         - containerPort: 15021
         - containerPort: 8080
-          hostPort: 80
         - containerPort: 8443
-          hostPort: 443
         - containerPort: 15443
         - containerPort: 15011
         - containerPort: 15012
@@ -5568,9 +5570,6 @@ spec:
         secret:
           optional: true
           secretName: istio-ingressgateway-ca-certs
-  updateStrategy:
-    rollingUpdate:
-      maxUnavailable: 1
 ---
 apiVersion: policy/v1beta1
 kind: PodDisruptionBudget
