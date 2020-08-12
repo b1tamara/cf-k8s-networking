@@ -74,4 +74,3 @@ var _ = Describe("Control Plane Uptime", func() {
 		})
 	})
 })
-
